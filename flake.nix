@@ -26,9 +26,14 @@
     };
 
     ghc-wasm-meta.url = "gitlab:ghc/ghc-wasm-meta?host=gitlab.haskell.org";
+
+    bindist = {
+      url = "path:/FILL IN BINDIST DIR";
+      flake = false;
+    };
   };
 
-  outputs = { nixpkgs, all-cabal-hashes, pre-commit-hooks, ghc-wasm-meta, ... }: with nixpkgs.lib; let
+  outputs = { nixpkgs, all-cabal-hashes, pre-commit-hooks, ghc-wasm-meta, bindist, ... }: with nixpkgs.lib; let
     supportedSystems =
       # allow nix flake show and nix flake check when passing --impure
       if builtins.hasAttr "currentSystem" builtins
@@ -96,6 +101,30 @@
         Learn more about available arguments at https://github.com/alpmestan/ghc.nix/
       '';
     };
+
+    packages = perSystem (system: let
+      pkgs = import nixpkgs { inherit system; };
+
+      haskellLibUncomposable = import "${nixpkgs}/pkgs/development/haskell-modules/lib" {
+        inherit (pkgs) lib;
+        inherit pkgs;
+      };
+
+      callPackage = pkgs.newScope {
+        haskellLib = haskellLibUncomposable.compose;
+        overrides = pkgs.haskell.packageOverrides;
+      };
+
+      inherit (pkgs.haskell) packages;
+    in {
+
+      default = callPackage (import ./hadrian.nix { version = "9.8.2"; inherit bindist; }) {
+        inherit (packages.darwin) xattr;
+        buildTargetLlvmPackages = pkgs.pkgsBuildTarget.llvmPackages_15;
+        llvmPackages = pkgs.llvmPackages_15;
+      };
+
+    });
 
     inherit lib;
   };
